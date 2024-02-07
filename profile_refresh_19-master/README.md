@@ -1,10 +1,6 @@
 
 # Indicator List :stuck_out_tongue_winking_eye:
 
-There are six domains within the Dementia Profile. Each domain contains a number of indicator scripts as listed below...
-
-Before doing any work, make sure that you have read all the notes on [Confluence - Dementia Profile Refresh](https://digitaltools.phe.org.uk/confluence/display/DIR/Dementia+Indicator+Refresh)
-
 ## 1. Prevalence (8):
 
 * There are 4 indicators produced at LA and CCG level = 8 PHOLIO sheets to produce
@@ -15,7 +11,7 @@ Before doing any work, make sure that you have read all the notes on [Confluence
 
 ## 2. Preventing Well (0):
 
-* We don't produce any indicators for this domain
+* no indicators for this domain
 
 ## 3. Diagnosing Well (2):
 
