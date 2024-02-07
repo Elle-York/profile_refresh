@@ -1,0 +1,400 @@
+---
+title: "QA Report"
+output: 
+  phecharts::html_phe:
+    includes:
+      in_header: phe_logo.html
+---
+
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, include=FALSE}
+
+library(tidyverse)
+library(data.table)
+library(PHEindicatormethods)
+library(readxl)
+library(xlsx)
+library(lubridate)
+library(fingertipsR)
+library(compareDF)
+library(qwraps2)
+library(htmlTable)
+library(dlookr)
+library(knitr)
+library(kableExtra)
+library(phecharts)
+
+```
+
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+# This is the only box you have to enter any information (3 entries)
+
+# 1. Import your new pholio sheet
+
+New_data <- "A:/PHE/MHDNIN/04 Key Projects/Dementia&Neurology/Dementia/Dementia Work/Projects/201819/profile_refresh_19/PHOLIO/To_QA/91887_LA.xlsx" 
+
+# 2. Put number of indicator here and it feeds through
+
+Indicator_No <- "91887" 
+
+# 3. Put name of indicator here
+
+cat("91887")
+
+# Throughout the code, LA's are identified by the strings 'E0 | E10', 
+# Regions'E12', and England is 'E92'. 
+# If the geographies ever change, you will need to amend the strings.
+# Once youve inputed the data and the Indicator ID then...
+# You just press 'knit' at the top and then the code outputs a report.
+
+```
+
+
+```{r, include=FALSE}
+
+# Import your PHOLIO sheet for this particular indicator
+
+New_data <- read_xlsx(New_data, 
+                    sheet = 'PHOLIO')
+
+New_data <- New_data %>% 
+  select(IndicatorID,
+         AreaCode,
+         SexID,
+         AgeID,
+         Count,
+         Denominator,
+         Value,
+         LowerCI95,
+         UpperCI95,
+         Valuenote = ValueNoteId) 
+
+New_data$AreaCode <- toupper(New_data$AreaCode)
+
+New_data <- as.data.frame(New_data)
+
+```
+
+
+```{r, include=FALSE}
+
+# Import last year's PHOLIO from Fingertips for this indicator
+
+Old_data <- fingertips_data(Indicator_No) %>% 
+  filter(Timeperiod == max(Timeperiod)) %>% 
+  distinct(AreaCode,.keep_all = TRUE ) %>% 
+  arrange(AreaCode) %>% 
+  select(IndicatorID,
+         AreaCode,
+         AreaName,
+         SexID = Sex,
+         AgeID = Age,
+         Count,
+         Denominator,
+         Value,
+         LowerCI95 = LowerCI95.0limit,
+         UpperCI95 = UpperCI95.0limit,
+         Valuenote)
+
+Old_data <- Old_data %>% 
+  mutate(SexID = ifelse(SexID == "Persons", "4", SexID)) %>% 
+  mutate(AgeID = ifelse(AgeID == "65+ yrs", "27", AgeID)) %>% 
+  mutate(AgeID = ifelse(AgeID == "<65 yrs", "279", AgeID)) %>% 
+  mutate(AgeID = ifelse(AgeID == "All ages", "1", AgeID))
+
+```
+
+
+
+```{r, include=FALSE}
+
+# Join both PHOLIO sheets
+
+Combined <- full_join(New_data, Old_data, by = 'AreaCode') %>% 
+  select(AreaCode,
+         AreaName,
+         NewCount = Count.x,
+         OldCount = Count.y,
+         NewDenom = Denominator.x,
+         OldDenom = Denominator.y,
+         NewVal = Value.x,
+         OldVal = Value.y,
+         NewLower_CI = LowerCI95.x,
+         NewUpper_CI = UpperCI95.x,
+         OldLower_CI = LowerCI95.y,
+         OldUpper_CI = UpperCI95.y,
+         NewNote = Valuenote.x,
+         OldNote = Valuenote.y)
+
+```
+
+### Introduction:
+
+This QA report provides information on the following:
+
+* Aggregated counts for new data, i.e. local authorities, regions and England
+* Minimum values of local authority data
+* Missing values for both datasets
+* Value notes used in both datasets
+* Outliers for counts, denominators and values
+
+
+### Aggregated Values:
+
+The following table provides the aggregated numerator (count) and denominator at local authority, region and England level. The region and England level should be equal. The local authority may differ due to suppression or combined values - if this is the case there should be at least one value note in the set of data.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+# Aggregated values from new PHOLIO at LA, Region and England Level
+
+Aggregated_Values <- New_data %>% 
+  mutate(Type = case_when(grepl('E0|E10', AreaCode) ~ 'LA',
+                          grepl('E12', AreaCode) ~ 'Region',
+                          grepl('E92', AreaCode) ~ 'England')) %>% 
+  select(Type,
+         Count,
+         Denominator) %>% 
+  group_by(Type) %>% 
+  summarise(Count = sum(Count),
+            Denominator = sum(Denominator))
+
+kable(Aggregated_Values, format = "html", caption = 'Aggregated Values') %>% 
+  kable_styling(bootstrap_options = c('striped', 'hover'),
+                full_width = F, 
+                position = 'left',
+                font_size = 12)
+
+```
+
+
+### Minimum Values:
+
+Check for small numbers in the dataset, and if there are any, then check the value section to ensure that they have been coded as such for this year.
+
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+Min_Value <- Combined %>% 
+  filter(NewCount == min(NewCount)| NewCount < 30 |
+           OldCount == min(OldCount) | OldCount < 30) %>%  
+  select(AreaCode, 
+         AreaName, 
+         NewCount, 
+         OldCount, 
+         NewDenom, 
+         OldDenom, 
+         NewVal, 
+         OldVal, 
+         NewLower_CI, 
+         NewUpper_CI,
+         OldLower_CI,
+         OldUpper_CI,
+         NewNote,
+         OldNote) %>% 
+  arrange(AreaCode)
+
+kable(Min_Value, format = "html", caption = 'Minimum Values of Local Authority Data') %>% 
+   kable_styling(bootstrap_options = c('striped', 'hover', 'condensed'),
+                full_width = F, 
+                position = 'left',
+                font_size = 10)
+  
+```
+
+
+### Missing Values:
+
+Check for any missing values in either dataset. Missing values are displayed as 'NA' (not available). 
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+# Examine NA values in both datasets
+
+Missing_Values <- Combined %>% 
+  select(-c(OldNote, NewNote)) %>% 
+  filter_all(any_vars(is.na(.))) %>% 
+  arrange(AreaCode)
+
+kable(Missing_Values, format = "html", caption = 'Missing Values') %>% 
+  kable_styling(bootstrap_options = c('striped', 'hover'),
+                full_width = F, 
+                position = 'left',
+                font_size = 10)
+
+```
+
+
+### Value Notes:
+
+If there were small numbers/missing values, and/or the aggregate count for LAs differed from England, then there should be a value note for this year. The table also displays the value notes that were used last year. 
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+# Examine value notes in both datasets
+
+Value_Notes <- Combined %>%
+  filter(!is.na(OldNote) | NewNote != 0) %>% 
+  select(AreaCode,
+         AreaName,
+         NewNote,
+         OldNote) %>% 
+  arrange(AreaCode)
+
+kable(Value_Notes, format = "html",
+      caption = 'Value notes for both sets of data') %>% 
+  kable_styling(bootstrap_options = c('striped', 'hover'),
+                full_width = F, 
+                position = 'left',
+                font_size = 10)
+  
+```
+
+### Extreme Outliers:
+
+The following tables provide a list of local authorities that are in the 'Upper Extreme' or the 'Lower Extreme' of the interquartile range. The IQR calculation for Upper is '3rd Quartile + (1.5 x IQR), and for the Lower is '1st Quartile - (1.5 x IQR)'. The table also shows the quartile position from last year. Drawing on 'Statistical Process Control' methods; these outliers are the equivalent to 'Beyond three standard deviations' and would be deemed as unwarranted variation.
+
+
+### Counts
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+Upper_Outlier <- function(x){
+  summary(x)[['3rd Qu.']] + (1.5 * IQR(x))
+  }
+
+Lower_Outlier <- function(x){
+  summary(x)[['1st Qu.']] - (1.5 * IQR(x))
+}
+
+
+Extreme_Count <- Combined %>% 
+  filter(str_detect(AreaCode, "E0|E10")) %>% 
+  select(AreaCode, AreaName, NewCount, OldCount) %>% 
+  arrange(AreaCode) %>% 
+  replace_na(list(NewCount = 0)) %>% 
+  replace_na(list(OldCount = 0)) 
+
+Extreme_Count <- Extreme_Count %>% 
+  mutate(NewExtreme = case_when(
+    NewCount >= Upper_Outlier(NewCount) ~ 'Upper',
+    NewCount <= Lower_Outlier(NewCount) ~ 'Lower')) %>% 
+  mutate(OldExtreme = case_when(
+    OldCount >= Upper_Outlier(OldCount) ~ 'Upper',
+    OldCount <= Lower_Outlier(OldCount) ~ 'Lower')) %>% 
+  filter(NewExtreme == 'Upper' |
+           NewExtreme == 'Lower')
+  
+
+kable(Extreme_Count, format = "html", caption = 'Local Authority - Outlier Counts') %>%
+  kable_styling(bootstrap_options = c('striped', 'hover', 'condensed'),
+                full_width = F, 
+                position = 'left',
+                font_size = 12) %>% 
+  column_spec(1, bold = T, border_right = T)
+
+```
+
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+New_data %>%
+  filter(str_detect(AreaCode, "E0|E10")) %>% 
+  plot_outlier(Count) 
+
+```
+
+### Denominators
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+Extreme_Denom <- Combined %>% 
+  filter(str_detect(AreaCode, "E0|E10")) %>% 
+  select(AreaCode, AreaName, NewDenom, OldDenom) %>% 
+  arrange(AreaCode) %>% 
+  replace_na(list(NewDenom = 0)) %>% 
+  replace_na(list(OldDenom = 0)) 
+
+Extreme_Denom <- Extreme_Denom %>% 
+  mutate(NewExtreme = case_when(
+    NewDenom >= Upper_Outlier(NewDenom) ~ 'Upper',
+    NewDenom <= Lower_Outlier(NewDenom) ~ 'Lower')) %>% 
+  mutate(OldExtreme = case_when(
+    OldDenom >= Upper_Outlier(OldDenom) ~ 'Upper',
+    OldDenom <= Lower_Outlier(OldDenom) ~ 'Lower')) %>% 
+  filter(NewExtreme == 'Upper' |
+           NewExtreme == 'Lower')
+  
+
+
+kable(Extreme_Denom, format = "html", caption = 'Local Authority - Outlier Denominators') %>%
+  kable_styling(bootstrap_options = c('striped', 'hover', 'condensed'),
+                full_width = F, 
+                position = 'left',
+                font_size = 10) %>% 
+  column_spec(1, bold = T, border_right = T)
+
+```
+
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+New_data %>%
+  filter(str_detect(AreaCode, "E0|E10")) %>% 
+  plot_outlier(Denominator) 
+
+```
+
+
+### Values
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+
+Extreme_Val <- Combined %>% 
+  filter(str_detect(AreaCode, "E0|E10")) %>% 
+  select(AreaCode, AreaName, NewVal, OldVal) %>% 
+  arrange(AreaCode) %>% 
+  replace_na(list(NewVal = 0)) %>% 
+  replace_na(list(OldVal = 0)) 
+
+Extreme_Val <- Extreme_Val %>% 
+  mutate(NewExtreme = case_when(
+    NewVal >= Upper_Outlier(NewVal) ~ 'Upper',
+    NewVal <= Lower_Outlier(NewVal) ~ 'Lower')) %>% 
+  mutate(OldExtreme = case_when(
+    OldVal >= Upper_Outlier(OldVal) ~ 'Upper',
+    OldVal <= Lower_Outlier(OldVal) ~ 'Lower')) %>% 
+  filter(NewExtreme == 'Upper' |
+           NewExtreme == 'Lower')
+
+if(nrow(Extreme_Val) == 0){
+  cat('There are no outlier values')
+} else{
+  kable(Extreme_Val, format = "html", caption = 'Local Authority - Outlier Values') %>%
+  kable_styling(bootstrap_options = c('striped', 'hover', 'condensed'),
+                full_width = F, 
+                position = 'left',
+                font_size = 10) %>% 
+  column_spec(1, bold = T, border_right = T)
+  
+}
+
+
+```
+
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+New_data %>%
+  filter(str_detect(AreaCode, "E0|E10")) %>% 
+  plot_outlier(Value) 
+
+```
+
+
